@@ -36,7 +36,7 @@ public final class Domain {
     public record RelationDraft(String source, String target, String type, String description, double weight) {}
     public record Summary(String title, String text) {}
     public record Parsed(String text, String location) {}
-    public record Input(String name, String mediaType, byte[] bytes) {}
+    public record Input(String name, String mediaType, byte[] bytes, String existingDocumentId) { public Input(String name,String mediaType,byte[] bytes){this(name,mediaType,bytes,null);} }
     public record Settings(int passageSize, int overlap, int chunkSize, int seeds, int relationships, int passages, int communities, int passagesPerCommunity, int followups, int vectorContext, int vectorInspect) {
         public Settings { if(passageSize<100 || overlap<0 || overlap>=passageSize || chunkSize<50 || seeds<1 || relationships<1 || passages<1 || communities<1 || passagesPerCommunity<1 || followups<1 || followups>10 || vectorContext<1 || vectorInspect<vectorContext) throw new IllegalArgumentException("Invalid ingestion or retrieval limits"); }
         public static Settings defaults() { return new Settings(6000,600,500,3,10,5,3,2,3,5,12); }

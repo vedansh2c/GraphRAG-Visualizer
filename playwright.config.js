@@ -1,0 +1,2 @@
+const { defineConfig } = require('@playwright/test');
+module.exports = defineConfig({testDir:'tests/browser',fullyParallel:false,workers:1,use:{channel:'chromium',launchOptions:process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{},baseURL:process.env.APP_URL||'http://localhost:8090',viewport:{width:1440,height:900},trace:'retain-on-failure'},reporter:'list',timeout:45000});
