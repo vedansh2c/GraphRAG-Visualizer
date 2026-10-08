@@ -8,4 +8,4 @@ Each task branch starts from the completed predecessor. Prior branches remain fa
 4. `task/04-workspace`: graph exploration, chat, source inspection, replay, comparison, contextual help, browser tests.
 5. `task/05-delivery`: Docker Compose, configuration, documentation, complete validation and limitations.
 
-Status: repository initialized; implementation pending.
+Step 1 complete: Java 21 core, typed ports, deterministic extraction, normalization, ingestion, four retrieval algorithms, citation validation, recorded traces and graph/source library operations. `mvn -q -pl core test` passed (3 tests). Full retrieval/adapter workflow tests follow in step 2.
