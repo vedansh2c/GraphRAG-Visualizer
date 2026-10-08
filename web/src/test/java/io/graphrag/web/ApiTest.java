@@ -1,23 +1,157 @@
 package io.graphrag.web;
-import io.graphrag.core.Domain.*;
-import io.graphrag.neo4j.Json;
-import org.junit.jupiter.api.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.mock.web.MockMultipartFile;
-import java.nio.file.*;
-import java.time.Instant;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-@SpringBootTest(properties={"explorer.store=file","explorer.data-dir=target/api-test-data","explorer.api-key=test-key-never-used","explorer.base-url=http://127.0.0.1:1/v1","explorer.community-detector=inprocess"})
+
+import io.graphrag.core.Domain.*;
+import io.graphrag.neo4j.Json;
+import java.nio.file.*;
+import java.time.Instant;
+import org.junit.jupiter.api.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MockMvc;
+
+@SpringBootTest(
+    properties = {
+      "explorer.store=file",
+      "explorer.data-dir=target/api-test-data",
+      "explorer.api-key=test-key-never-used",
+      "explorer.base-url=http://127.0.0.1:1/v1",
+      "explorer.community-detector=inprocess"
+    })
 @AutoConfigureMockMvc
 class ApiTest {
- @Autowired MockMvc mvc;@Autowired ExplorerService service;
- private String ready(String id) throws Exception {long end=System.nanoTime()+10_000_000_000L;while(service.store.read(id).corpus().status()==Status.BUILDING&&System.nanoTime()<end)Thread.sleep(10);assertEquals(Status.READY,service.store.read(id).corpus().status(),service.store.read(id).corpus().reason());return id;}
- @Test void offlineDemoIgnoresConfiguredCredentialsAndAllApisWork() throws Exception {var response=mvc.perform(post("/api/corpora/demo-offline")).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();String id=ready(Json.MAPPER.readTree(response).get("id").asText());assertEquals("DETERMINISTIC",service.store.read(id).corpus().mode());assertTrue(service.store.read(id).communities().size()>=3);mvc.perform(get("/api/corpora/{id}/graph",id)).andExpect(status().isOk()).andExpect(jsonPath("$.entities").isArray());for(Mode mode:Mode.values()){var a=mvc.perform(post("/api/corpora/{id}/query",id).contentType("application/json").content("{\"question\":\"Sherlock Holmes\",\"mode\":\""+mode+"\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.noAnswer").value(false)).andReturn().getResponse().getContentAsString();var answer=Json.decode(a,Answer.class);mvc.perform(get("/api/traces/{id}",answer.traceId())).andExpect(status().isOk());for(Citation c:answer.citations())mvc.perform(get("/api/corpora/"+id+(c.sourceKind().equals("chunk")?"/chunks/":"/text-units/")+c.sourceId())).andExpect(status().isOk());}mvc.perform(post("/api/corpora/{id}/compare-all",id).contentType("application/json").content("{\"question\":\"Sherlock Holmes\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.results.VECTOR").exists()).andExpect(jsonPath("$.results.DRIFT").exists());mvc.perform(post("/api/corpora/{id}/activate",id)).andExpect(status().isOk());mvc.perform(get("/api/corpora")).andExpect(jsonPath("$.activeId").value(id));mvc.perform(get("/api/corpora/{id}/progress",id)).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("event:progress")));}
- @Test void validationAndFailedIngestionAreVisible() throws Exception {mvc.perform(multipart("/api/corpora")).andExpect(status().isBadRequest());mvc.perform(multipart("/api/corpora").file(new MockMultipartFile("files","bad.exe","application/octet-stream",new byte[]{1}))).andExpect(status().isBadRequest());String payload=mvc.perform(multipart("/api/corpora").file(new MockMultipartFile("files","blank.txt","text/plain","   ".getBytes())).param("offline","true")).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();String id=Json.MAPPER.readTree(payload).get("id").asText();long until=System.nanoTime()+5_000_000_000L;while(service.store.read(id).corpus().status()==Status.BUILDING&&System.nanoTime()<until)Thread.sleep(10);assertEquals(Status.FAILED,service.store.read(id).corpus().status());mvc.perform(post("/api/corpora/{id}/query",id).contentType("application/json").content("{\"question\":\"hello\"}")).andExpect(status().isConflict());mvc.perform(get("/api/corpora/unknown/graph")).andExpect(status().isNotFound());}
- @Test void uploadedTextPersistsAndRestartRecovery() throws Exception {String body=mvc.perform(multipart("/api/corpora").file(new MockMultipartFile("files","upload.txt","text/plain","Alice Smith met Bob Jones and Carol Brown.".getBytes())).param("offline","true")).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();String id=ready(Json.MAPPER.readTree(body).get("id").asText());assertFalse(service.store.read(id).entities().isEmpty());String interrupted=java.util.UUID.randomUUID().toString();service.store.save(Snapshot.empty(new Corpus(interrupted,"Interrupted",Status.BUILDING,Instant.now(),"DETERMINISTIC",null,null)));service.recover();assertEquals(Status.FAILED,service.store.read(interrupted).corpus().status());assertEquals(Status.READY,service.store.read(id).corpus().status());}
+  @Autowired MockMvc mvc;
+  @Autowired ExplorerService service;
+
+  private String ready(String id) throws Exception {
+    long end = System.nanoTime() + 10_000_000_000L;
+    while (service.store.read(id).corpus().status() == Status.BUILDING && System.nanoTime() < end)
+      Thread.sleep(10);
+    assertEquals(
+        Status.READY,
+        service.store.read(id).corpus().status(),
+        service.store.read(id).corpus().reason());
+    return id;
+  }
+
+  @Test
+  void offlineDemoIgnoresConfiguredCredentialsAndAllApisWork() throws Exception {
+    var response =
+        mvc.perform(post("/api/corpora/demo-offline"))
+            .andExpect(status().isAccepted())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String id = ready(Json.MAPPER.readTree(response).get("id").asText());
+    assertEquals("DETERMINISTIC", service.store.read(id).corpus().mode());
+    assertTrue(service.store.read(id).communities().size() >= 3);
+    mvc.perform(get("/api/corpora/{id}/graph", id))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.entities").isArray());
+    for (Mode mode : Mode.values()) {
+      var a =
+          mvc.perform(
+                  post("/api/corpora/{id}/query", id)
+                      .contentType("application/json")
+                      .content("{\"question\":\"Sherlock Holmes\",\"mode\":\"" + mode + "\"}"))
+              .andExpect(status().isOk())
+              .andExpect(jsonPath("$.noAnswer").value(false))
+              .andReturn()
+              .getResponse()
+              .getContentAsString();
+      var answer = Json.decode(a, Answer.class);
+      mvc.perform(get("/api/traces/{id}", answer.traceId())).andExpect(status().isOk());
+      for (Citation c : answer.citations())
+        mvc.perform(
+                get(
+                    "/api/corpora/"
+                        + id
+                        + (c.sourceKind().equals("chunk") ? "/chunks/" : "/text-units/")
+                        + c.sourceId()))
+            .andExpect(status().isOk());
+    }
+    mvc.perform(
+            post("/api/corpora/{id}/compare-all", id)
+                .contentType("application/json")
+                .content("{\"question\":\"Sherlock Holmes\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.results.VECTOR").exists())
+        .andExpect(jsonPath("$.results.DRIFT").exists());
+    mvc.perform(post("/api/corpora/{id}/activate", id)).andExpect(status().isOk());
+    mvc.perform(get("/api/corpora")).andExpect(jsonPath("$.activeId").value(id));
+    mvc.perform(get("/api/corpora/{id}/progress", id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("event:progress")));
+  }
+
+  @Test
+  void validationAndFailedIngestionAreVisible() throws Exception {
+    mvc.perform(multipart("/api/corpora")).andExpect(status().isBadRequest());
+    mvc.perform(
+            multipart("/api/corpora")
+                .file(
+                    new MockMultipartFile(
+                        "files", "bad.exe", "application/octet-stream", new byte[] {1})))
+        .andExpect(status().isBadRequest());
+    String payload =
+        mvc.perform(
+                multipart("/api/corpora")
+                    .file(
+                        new MockMultipartFile("files", "blank.txt", "text/plain", "   ".getBytes()))
+                    .param("offline", "true"))
+            .andExpect(status().isAccepted())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String id = Json.MAPPER.readTree(payload).get("id").asText();
+    long until = System.nanoTime() + 5_000_000_000L;
+    while (service.store.read(id).corpus().status() == Status.BUILDING && System.nanoTime() < until)
+      Thread.sleep(10);
+    assertEquals(Status.FAILED, service.store.read(id).corpus().status());
+    mvc.perform(
+            post("/api/corpora/{id}/query", id)
+                .contentType("application/json")
+                .content("{\"question\":\"hello\"}"))
+        .andExpect(status().isConflict());
+    mvc.perform(get("/api/corpora/unknown/graph")).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void uploadedTextPersistsAndRestartRecovery() throws Exception {
+    String body =
+        mvc.perform(
+                multipart("/api/corpora")
+                    .file(
+                        new MockMultipartFile(
+                            "files",
+                            "upload.txt",
+                            "text/plain",
+                            "Alice Smith met Bob Jones and Carol Brown.".getBytes()))
+                    .param("offline", "true"))
+            .andExpect(status().isAccepted())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String id = ready(Json.MAPPER.readTree(body).get("id").asText());
+    assertFalse(service.store.read(id).entities().isEmpty());
+    String interrupted = java.util.UUID.randomUUID().toString();
+    service.store.save(
+        Snapshot.empty(
+            new Corpus(
+                interrupted,
+                "Interrupted",
+                Status.BUILDING,
+                Instant.now(),
+                "DETERMINISTIC",
+                null,
+                null)));
+    service.recover();
+    assertEquals(Status.FAILED, service.store.read(interrupted).corpus().status());
+    assertEquals(Status.READY, service.store.read(id).corpus().status());
+  }
 }

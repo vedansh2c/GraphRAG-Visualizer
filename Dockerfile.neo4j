@@ -1,5 +1,9 @@
 FROM neo4j:5.26.12-community
-ADD https://github.com/neo4j/graph-data-science/releases/download/2.13.2/neo4j-graph-data-science-2.13.2.jar /plugins/neo4j-graph-data-science.jar
 USER root
-RUN chmod 644 /plugins/neo4j-graph-data-science.jar
+RUN mkdir -p /plugins \
+    && wget --quiet --timeout=60 --tries=3 \
+      https://github.com/neo4j/graph-data-science/releases/download/2.13.2/neo4j-graph-data-science-2.13.2.jar \
+      -O /plugins/neo4j-graph-data-science.jar \
+    && echo 'edb7ce2ae1642449073ed2fd72b8438ce312fefee0b3ae04dbb0854eaecbd16f  /plugins/neo4j-graph-data-science.jar' | sha256sum -c - \
+    && chmod 644 /plugins/neo4j-graph-data-science.jar
 USER neo4j
