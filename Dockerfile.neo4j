@@ -1,0 +1,5 @@
+FROM neo4j:5.26.12-community
+ADD https://github.com/neo4j/graph-data-science/releases/download/2.13.2/neo4j-graph-data-science-2.13.2.jar /plugins/neo4j-graph-data-science.jar
+USER root
+RUN chmod 644 /plugins/neo4j-graph-data-science.jar
+USER neo4j
