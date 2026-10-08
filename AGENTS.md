@@ -1,0 +1,1 @@
+Keep responses concise. Read docs/requirements.md and docs/progress.md before changes. Keep the core framework independent and Java 21 compatible. Commit validated checkpoints on sequential task branches; do not overwrite prior checkpoints. Do not commit secrets or generated data.
